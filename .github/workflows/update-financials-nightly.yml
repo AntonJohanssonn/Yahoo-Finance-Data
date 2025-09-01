@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: true
-          fetch-depth: 0       # get full history so we can pull/rebase
+          fetch-depth: 0       # full history so we can pull/rebase
 
       - name: 🐍 Set up Python
         uses: actions/setup-python@v5
@@ -35,18 +35,35 @@ jobs:
       - name: 🚀 Commit & push JSON
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          BRANCH: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}     # e.g. AntonJohanssonn/Yahoo-Finance-Data
+          BRANCH: ${{ github.ref_name }}     # e.g. main
         run: |
           set -e
+
           git config user.name  "github-actions[bot]"
           git config user.email "[email protected]"
 
+          # Stage and make a commit if anything changed
           git add data/*.json || true
           git commit -m "Nightly auto-update $(date -u '+%Y-%m-%dT%H:%MZ')" || echo "No changes to commit"
 
+          # 🔐 Ensure the remote URL uses the token (auth!)
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+
+          # 🔄 Be up-to-date before pushing (fixes 'fetch first')
           git fetch origin ${BRANCH}
           git pull --rebase origin ${BRANCH}
+
+          # 🟢 Push back to the same branch
+          git push origin HEAD:${BRANCH}
+
+      # (Optional) small debug block to verify the remote is tokenized
+      - name: 🔎 Debug git state
+        if: always()
+        run: |
+          git remote -v
+          git status
+          git log --oneline -5
+
           git push origin HEAD:${BRANCH}
 
