@@ -8,7 +8,7 @@ import json, time
 from pathlib import Path
 import yfinance as yf
 
-TICKERS = ["AAPL", "MSFT", "NVDA", "ACB"]  # add/remove as you wish
+TICKERS = ["AAPL", "MSFT", "NVDA"]  # add/remove as you wish
 OUT_DIR = Path("data")
 OUT_DIR.mkdir(exist_ok=True)
 
@@ -20,17 +20,15 @@ def _first_existing(row, candidates):
 
 def quarter_results(symbol: str) -> dict:
     tkr = yf.Ticker(symbol)
-
-    # Newer yfinance: quarterly_income_stmt (rows = line-items, cols = periods)
+    # Newer yfinance
     stmt = getattr(tkr, "quarterly_income_stmt", None)
     if stmt is None or stmt.empty:
-        # Fallback for older versions: quarterly_financials
+        # Fallback for older versions
         stmt = getattr(tkr, "quarterly_financials", None)
         if stmt is None or stmt.empty:
             return {}
 
-    # Transpose: each row = one period
-    stmt = stmt.T  # index = Timestamp (period end), columns = line items
+    stmt = stmt.T  # index = period end (Timestamp), columns = line items
 
     revenue_cols  = ["Total Revenue", "Revenue"]
     earnings_cols = ["Net Income", "Net Income Common Stockholders",
@@ -58,3 +56,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
