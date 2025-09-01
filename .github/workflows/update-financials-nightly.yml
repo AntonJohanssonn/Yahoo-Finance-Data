@@ -39,31 +39,25 @@ jobs:
           BRANCH: ${{ github.ref_name }}     # e.g. main
         run: |
           set -e
-
           git config user.name  "github-actions[bot]"
           git config user.email "[email protected]"
 
-          # Stage and make a commit if anything changed
           git add data/*.json || true
           git commit -m "Nightly auto-update $(date -u '+%Y-%m-%dT%H:%MZ')" || echo "No changes to commit"
 
-          # 🔐 Ensure the remote URL uses the token (auth!)
+          # Ensure authenticated remote + up-to-date branch to avoid non-fast-forward
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
-
-          # 🔄 Be up-to-date before pushing (fixes 'fetch first')
           git fetch origin ${BRANCH}
           git pull --rebase origin ${BRANCH}
 
-          # 🟢 Push back to the same branch
           git push origin HEAD:${BRANCH}
 
-      # (Optional) small debug block to verify the remote is tokenized
-      - name: 🔎 Debug git state
+      # ✅ Optional safe debug (won’t error out)
+      - name: 🔎 Debug (safe)
         if: always()
         run: |
-          git remote -v
-          git status
-          git log --oneline -5
+          echo "Remote URLs:"; git remote -v || true
+          echo "Status:"; git status || true
+          echo "Recent commits:"; git log --oneline -5 || true
 
-          git push origin HEAD:${BRANCH}
 
