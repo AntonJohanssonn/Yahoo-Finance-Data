@@ -10,9 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write          # allow commits back to THIS repo
+
     steps:
       - name: 🛎️ Checkout repo
         uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0       # get full history so we can pull/rebase
 
       - name: 🐍 Set up Python
         uses: actions/setup-python@v5
@@ -29,11 +33,20 @@ jobs:
         run: python scripts/fetch.py
 
       - name: 🚀 Commit & push JSON
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
         run: |
+          set -e
           git config user.name  "github-actions[bot]"
           git config user.email "[email protected]"
+
           git add data/*.json || true
-          # Exit 0 if no changes, so the job doesn't fail
-          git commit -m "Nightly auto-update $(date -u '+%Y-%m-%dT%H:%MZ')" || exit 0
-          # Push back to the same branch that triggered the workflow
-          git push origin HEAD:${{ github.ref_name }}
+          git commit -m "Nightly auto-update $(date -u '+%Y-%m-%dT%H:%MZ')" || echo "No changes to commit"
+
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          git fetch origin ${BRANCH}
+          git pull --rebase origin ${BRANCH}
+          git push origin HEAD:${BRANCH}
+
