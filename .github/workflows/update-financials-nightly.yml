@@ -2,21 +2,21 @@ name: update-financials-nightly
 
 on:
   schedule:
-    - cron: "15 20 * * *"     # 20:15 UTC (22:15 Stockholm)
-  workflow_dispatch: {}        # manual run button
+    - cron: "15 20 * * 1-5"     # 20:15 UTC (22:15 Stockholm), weekdays
+  workflow_dispatch: {}          # manual run button
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write          # allow commits back to THIS repo
+      contents: write            # allow commits back to THIS repo
 
     steps:
       - name: 🛎️ Checkout repo
         uses: actions/checkout@v4
         with:
           persist-credentials: true
-          fetch-depth: 0       # full history so we can pull/rebase
+          fetch-depth: 0         # full history so we can pull/rebase
 
       - name: 🐍 Set up Python
         uses: actions/setup-python@v5
@@ -45,14 +45,14 @@ jobs:
           git add data/*.json || true
           git commit -m "Nightly auto-update $(date -u '+%Y-%m-%dT%H:%MZ')" || echo "No changes to commit"
 
-          # Ensure authenticated remote + up-to-date branch to avoid non-fast-forward
+          # Auth + be up-to-date to avoid non-fast-forward errors
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
           git fetch origin ${BRANCH}
           git pull --rebase origin ${BRANCH}
 
           git push origin HEAD:${BRANCH}
 
-      # ✅ Optional safe debug (won’t error out)
+      # Optional: quick, safe debug info (won't fail the job)
       - name: 🔎 Debug (safe)
         if: always()
         run: |
@@ -60,4 +60,10 @@ jobs:
           echo "Status:"; git status || true
           echo "Recent commits:"; git log --oneline -5 || true
 
+      # Optional: show a snippet of each JSON in logs
+      - name: 📤 Show new JSON (optional)
+        if: always()
+        run: |
+          for f in data/*.json; do
+            echo "---- $(basename "$f")"; head -n 20 "$f"; echo; done || true
 
