@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-import json, time, os
+"""
+Fetch quarterly Revenue & EPS for the tickers below and save:
+  data/<TICKER>.json  and  data/index.json
+Requires yfinance >= 0.2.40
+"""
+import json, time
 from pathlib import Path
 import yfinance as yf
 
 TICKERS = ["AAPL", "MSFT", "NVDA"]
 OUT_DIR = Path("data")
 OUT_DIR.mkdir(exist_ok=True)
-
-RESULT_KEY = os.getenv("RESULT_KEY", "Result")  # <- new: rename “Earnings” to this
 
 def _first_existing(row, candidates):
     for c in candidates:
@@ -17,23 +20,31 @@ def _first_existing(row, candidates):
 
 def quarter_results(symbol: str) -> dict:
     tkr = yf.Ticker(symbol)
+
+    # Income statement for revenue
     stmt = getattr(tkr, "quarterly_income_stmt", None)
     if stmt is None or stmt.empty:
         stmt = getattr(tkr, "quarterly_financials", None)
-        if stmt is None or stmt.empty:
-            return {}
+    if stmt is None or stmt.empty:
+        return {}
 
-    stmt = stmt.T
+    stmt = stmt.T  # index = period end
 
-    revenue_cols  = ["Total Revenue", "Revenue"]
-    earnings_cols = ["Net Income", "Net Income Common Stockholders",
-                     "Net Income Applicable To Common Shares"]
+    # EPS is usually in quarterly_earnings
+    eps_df = getattr(tkr, "quarterly_earnings", None)
+    eps = {}
+    if eps_df is not None and not eps_df.empty:
+        for idx, row in eps_df.iterrows():
+            eps[str(idx.date())] = row.get("Earnings", None)
+
+    revenue_cols = ["Total Revenue", "Revenue"]
 
     out = {}
     for idx, row in stmt.iterrows():
-        out[str(idx.date())] = {
+        date = str(idx.date())
+        out[date] = {
             "Revenue": _first_existing(row, revenue_cols),
-            RESULT_KEY: _first_existing(row, earnings_cols),   # <- rename here
+            "EPS": eps.get(date, None)   # match with quarterly earnings
         }
     return out
 
