@@ -29,8 +29,37 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      # Generate fresh JSON (script should already write "Result")
       - name: 🔄 Run fetch script
+        env:
+          RESULT_KEY: Result
         run: python scripts/fetch.py
+
+      # Rename any existing files that still have "Earnings" -> "Result"
+      - name: 🧹 Migrate old JSON key (Earnings -> Result)
+        run: |
+          python - <<'PY'
+          import json, glob, sys
+          changed_any = False
+          for path in glob.glob('data/*.json'):
+              try:
+                  with open(path) as f: data = json.load(f)
+              except Exception:
+                  continue
+              touched = False
+              if isinstance(data, dict):
+                  for k, v in list(data.items()):
+                      if isinstance(v, dict) and 'Earnings' in v:
+                          v['Result'] = v.pop('Earnings')
+                          touched = True
+              if touched:
+                  with open(path, 'w') as f:
+                      json.dump(data, f, indent=2, sort_keys=True)
+                  print("Updated", path)
+                  changed_any = True
+          if not changed_any:
+              print("No old 'Earnings' keys found; nothing to migrate.")
+          PY
 
       - name: 🚀 Commit & push JSON
         env:
@@ -43,13 +72,12 @@ jobs:
           git config user.email "[email protected]"
 
           git add data/*.json || true
-          git commit -m "Nightly auto-update $(date -u '+%Y-%m-%dT%H:%MZ')" || echo "No changes to commit"
+          git commit -m "Rename Earnings→Result & nightly auto-update $(date -u '+%Y-%m-%dT%H:%MZ')" || echo "No changes to commit"
 
           # Auth + be up-to-date to avoid non-fast-forward errors
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
           git fetch origin ${BRANCH}
           git pull --rebase origin ${BRANCH}
-
           git push origin HEAD:${BRANCH}
 
       # Optional: quick, safe debug info (won't fail the job)
@@ -66,4 +94,3 @@ jobs:
         run: |
           for f in data/*.json; do
             echo "---- $(basename "$f")"; head -n 20 "$f"; echo; done || true
-
