@@ -15,7 +15,7 @@ import json, time
 from pathlib import Path
 import yfinance as yf
 
-TICKERS = ["AAPL", "MSFT", "NVDA"]   # add/remove tickers here
+TICKERS = ["AAPL", "MSFT", "NVDA", "ACB", "HRTX"]  # add/remove tickers here
 OUT_DIR = Path("data")
 OUT_DIR.mkdir(exist_ok=True)
 
