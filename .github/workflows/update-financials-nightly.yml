@@ -1,22 +1,31 @@
 name: update-financials-nightly
 
 on:
+  # Run when your iPhone app updates data/tickers.json, or you edit script/workflow
+  push:
+    branches: [ main ]                # change if your default branch differs
+    paths:
+      - 'data/tickers.json'
+      - 'scripts/fetch.py'
+      - '.github/workflows/update-financials-nightly.yml'
+  # Nightly schedule (weekdays 20:15 UTC = 22:15 Stockholm)
   schedule:
-    - cron: "15 20 * * 1-5"     # 20:15 UTC (22:15 Stockholm), weekdays
-  workflow_dispatch: {}          # manual run button
+    - cron: "15 20 * * 1-5"
+  # Manual run button in Actions tab
+  workflow_dispatch: {}
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write            # allow commits back to THIS repo
+      contents: write                 # allow commits back to THIS repo
 
     steps:
       - name: 🛎️ Checkout repo
         uses: actions/checkout@v4
         with:
           persist-credentials: true
-          fetch-depth: 0         # full history so we can pull/rebase
+          fetch-depth: 0              # full history so we can pull/rebase
 
       - name: 🐍 Set up Python
         uses: actions/setup-python@v5
@@ -29,21 +38,20 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      # Generate fresh JSON (script should already write "Result")
       - name: 🔄 Run fetch script
         env:
           RESULT_KEY: Result
         run: python scripts/fetch.py
 
-      # Rename any existing files that still have "Earnings" -> "Result"
+      # (Optional) migrate any legacy "Earnings" -> "Result" keys
       - name: 🧹 Migrate old JSON key (Earnings -> Result)
         run: |
           python - <<'PY'
-          import json, glob, sys
+          import json, glob
           changed_any = False
           for path in glob.glob('data/*.json'):
               try:
-                  with open(path) as f: data = json.load(f)
+                  with open(path, encoding='utf-8') as f: data = json.load(f)
               except Exception:
                   continue
               touched = False
@@ -53,7 +61,7 @@ jobs:
                           v['Result'] = v.pop('Earnings')
                           touched = True
               if touched:
-                  with open(path, 'w') as f:
+                  with open(path, 'w', encoding='utf-8') as f:
                       json.dump(data, f, indent=2, sort_keys=True)
                   print("Updated", path)
                   changed_any = True
@@ -69,10 +77,10 @@ jobs:
         run: |
           set -e
           git config user.name  "github-actions[bot]"
-          git config user.email "[email protected]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add data/*.json || true
-          git commit -m "Rename Earnings→Result & nightly auto-update $(date -u '+%Y-%m-%dT%H:%MZ')" || echo "No changes to commit"
+          git commit -m "Nightly/push auto-update $(date -u '+%Y-%m-%dT%H:%MZ')" || echo "No changes to commit"
 
           # Auth + be up-to-date to avoid non-fast-forward errors
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
@@ -94,3 +102,4 @@ jobs:
         run: |
           for f in data/*.json; do
             echo "---- $(basename "$f")"; head -n 20 "$f"; echo; done || true
+
