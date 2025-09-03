@@ -1,31 +1,28 @@
 name: update-financials-nightly
 
 on:
-  # Run when your iPhone app updates data/tickers.json, or you edit script/workflow
   push:
-    branches: [ main ]                # change if your default branch differs
+    branches: [ main ]
     paths:
       - 'data/tickers.json'
       - 'scripts/fetch.py'
       - '.github/workflows/update-financials-nightly.yml'
-  # Nightly schedule (weekdays 20:15 UTC = 22:15 Stockholm)
   schedule:
-    - cron: "15 20 * * 1-5"
-  # Manual run button in Actions tab
+    - cron: "15 20 * * 1-5"   # 20:15 UTC
   workflow_dispatch: {}
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write                 # allow commits back to THIS repo
+      contents: write
 
     steps:
       - name: 🛎️ Checkout repo
         uses: actions/checkout@v4
         with:
           persist-credentials: true
-          fetch-depth: 0              # full history so we can pull/rebase
+          fetch-depth: 0
 
       - name: 🐍 Set up Python
         uses: actions/setup-python@v5
@@ -38,42 +35,29 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 🔄 Run fetch script
-        env:
-          RESULT_KEY: Result
-        run: python scripts/fetch.py
-
-      # (Optional) migrate any legacy "Earnings" -> "Result" keys
-      - name: 🧹 Migrate old JSON key (Earnings -> Result)
+      - name: ✅ Verify tickers.json exists and show it
         run: |
+          if [ ! -f data/tickers.json ]; then
+            echo "❌ data/tickers.json is missing. Make sure your iPhone pushes to 'data/tickers.json' on branch 'main'."
+            exit 1
+          fi
+          echo "data/tickers.json:"
+          cat data/tickers.json
+          echo
+          echo "Parsed tickers:"
           python - <<'PY'
-          import json, glob
-          changed_any = False
-          for path in glob.glob('data/*.json'):
-              try:
-                  with open(path, encoding='utf-8') as f: data = json.load(f)
-              except Exception:
-                  continue
-              touched = False
-              if isinstance(data, dict):
-                  for k, v in list(data.items()):
-                      if isinstance(v, dict) and 'Earnings' in v:
-                          v['Result'] = v.pop('Earnings')
-                          touched = True
-              if touched:
-                  with open(path, 'w', encoding='utf-8') as f:
-                      json.dump(data, f, indent=2, sort_keys=True)
-                  print("Updated", path)
-                  changed_any = True
-          if not changed_any:
-              print("No old 'Earnings' keys found; nothing to migrate.")
+          import json
+          print(json.loads(open("data/tickers.json","r",encoding="utf-8").read()))
           PY
+
+      - name: 🔄 Run fetch script
+        run: python scripts/fetch.py
 
       - name: 🚀 Commit & push JSON
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}     # e.g. AntonJohanssonn/Yahoo-Finance-Data
-          BRANCH: ${{ github.ref_name }}     # e.g. main
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
         run: |
           set -e
           git config user.name  "github-actions[bot]"
@@ -82,24 +66,14 @@ jobs:
           git add data/*.json || true
           git commit -m "Nightly/push auto-update $(date -u '+%Y-%m-%dT%H:%MZ')" || echo "No changes to commit"
 
-          # Auth + be up-to-date to avoid non-fast-forward errors
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
           git fetch origin ${BRANCH}
           git pull --rebase origin ${BRANCH}
           git push origin HEAD:${BRANCH}
 
-      # Optional: quick, safe debug info (won't fail the job)
       - name: 🔎 Debug (safe)
         if: always()
         run: |
-          echo "Remote URLs:"; git remote -v || true
-          echo "Status:"; git status || true
           echo "Recent commits:"; git log --oneline -5 || true
 
-      # Optional: show a snippet of each JSON in logs
-      - name: 📤 Show new JSON (optional)
-        if: always()
-        run: |
-          for f in data/*.json; do
-            echo "---- $(basename "$f")"; head -n 20 "$f"; echo; done || true
 
